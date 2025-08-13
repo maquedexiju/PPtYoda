@@ -1,0 +1,25 @@
+[project]
+
+name = "ppt-killer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "browsercookie>=0.8.1",
+    "channels>=4.2.2",
+    "chromadb>=1.0.15",
+    "daphne>=4.2.1",
+    "django>=5.2.4",
+    "django-cors-headers>=4.7.0",
+    "openai>=1.98.0",
+    "pydoll-python>=2.3.1",
+    "pytest>=8.4.1",
+    "pytest-django>=4.11.1",
+    "python-pptx>=1.0.2",
+    "sentence-transformers>=5.0.0",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

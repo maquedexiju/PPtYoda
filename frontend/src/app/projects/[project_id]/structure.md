@@ -1,0 +1,9 @@
+- outline
+    - OutlineTaskList
+        - GenerateOutline: 生成大纲
+        - TaskItem: 大纲项
+        - TaskForm: 添加大纲
+    - OutlineTaskPanel
+        - RelatedFiles: 相关文件块
+            - DocTree: 文档树
+            - DocumentBlock: 一个文件内容块

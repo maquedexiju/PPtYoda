@@ -1,0 +1,22 @@
+[LLM]
+# 大模型配置
+LLM_BASE_URL=https://api.openai.com/v1/
+LLM_API_KEY=YOUR_API_KEY
+LLM_MODEL=gpt-3.5-turbo
+
+# 图片生成模型配置
+LLM_IMG_GEN_BASE_URL=https://api.openai.com/v1/
+LLM_IMG_GEN_API_KEY=YOUR_API_KEY
+LLM_IMG_GEN_MODEL=gpt-image-1
+
+# 网页助手类型配置，目前支持 doubao
+HELPER=doubao
+
+
+[EMBEDDING]
+
+# 模式包括 CHROMA 或 LLM
+#     CHROMA：前者使用本地的 chroma 数据库，尽量配置一个 MODEL_PATH，可参考 https://www.sbert.net/docs/sentence_transformer/pretrained_models.html
+#     LLM：直接使用大语言模型完成相关任务，无需额外配置
+METHOD=CHROMA
+MODEL_PATH=rainjay/sbert_nlp_corom_sentence-embedding_chinese-base-ecom
