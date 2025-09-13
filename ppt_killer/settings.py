@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'ppt_page',
     'ppt_template',
     'knowledge_base',
+    'project_template'
 ]
 
 MIDDLEWARE = [

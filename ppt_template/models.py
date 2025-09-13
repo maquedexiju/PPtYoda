@@ -1,9 +1,22 @@
 from django.db import models
 from .tools.template_parse import  Template_Parser
+from django.core.files.storage import FileSystemStorage
+import os
 from django.conf import settings
 
 import logging
 logger = logging.getLogger(__name__)
+
+# 自定义文件存储
+class PPTStorage(FileSystemStorage):
+    def get_available_name(self, name, max_length=None):
+        # 如果文件名已存在，不添加后缀
+        if os.path.exists(self.path(name)):
+            os.remove(self.path(name))
+        return name
+
+# 初始化存储系统
+ppt_storage = PPTStorage()
 
 # Create your models here.
 class PPt_Template(models.Model):
@@ -14,7 +27,10 @@ class PPt_Template(models.Model):
     def get_template_path(self, filename):
         return f'ppt_templates_files/{self.user.id}/{self.name}.pptx'
 
-    file = models.FileField(upload_to=get_template_path)
+    file = models.FileField(
+        upload_to=get_template_path,
+        storage=ppt_storage,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     cover_template = models.JSONField(null=True, blank=True, default=dict)

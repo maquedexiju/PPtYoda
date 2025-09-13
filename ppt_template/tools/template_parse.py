@@ -223,6 +223,9 @@ class Template_Parser():
                 elif text.startswith('container-'):
                     type = 'container'
                     text = text[10:]
+                elif text.startswith('icon-'):
+                    type = 'icon'
+                    text = text[5:]
                 else:
                     # diy 前缀需要保留在 name 中，同时 type 为空
                     type = 'text'

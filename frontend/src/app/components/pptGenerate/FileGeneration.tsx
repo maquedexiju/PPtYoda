@@ -41,7 +41,7 @@ export const FileGeneration: React.FC<{
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = file_name + '.pptx';
+                link.download = file_name;// + '.pptx';
                 link.click();
                 URL.revokeObjectURL(url);
 

@@ -62,12 +62,40 @@ runserver.sh
 # 忽略模型
 embedding_model
 
+# 忽略 icons
+icons/*
+!icons/default.svg
+!icons/PPT.svg
+!icons/制作.svg
+!icons/整合.svg
+!icons/循环.svg
+!icons/选择.svg
+!icons/写作.svg
+!icons/下载.svg
+!icons/文件夹.svg
+!icons/图片.svg
+!icons/替换.svg
+!icons/上传.svg
+!icons/任职截图.PNG
+!icons/任务清单.svg
+!icons/品质.svg
+!icons/模板.svg
+!icons/浏览器.svg
+!icons/丰富.svg
+!icons/定制.svg
+!icons/大纲.svg
+!icons/插入.svg
+!icons/布局.svg
+
 # 忽略项目数据
 ppt_files
 ppt_templates_files/*
 !ppt_templates_files/橙色.pptx
 !ppt_templates_files/蓝色.pptx
 !ppt_templates_files/黑白.pptx
+!ppt_templates_files/1/橙色.pptx
+!ppt_templates_files/1/蓝色.pptx
+!ppt_templates_files/1/黑白.pptx
 knowledges
 chroma_db
 chrome-data

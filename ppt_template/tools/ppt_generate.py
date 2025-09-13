@@ -2,6 +2,7 @@ from pydoc import text
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.slide import Slide
+from pptx.opc.package import Part
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.util import Emu
 import os
@@ -21,8 +22,11 @@ import asyncio
 from pptx.oxml.ns import _nsmap
 
 _nsmap['p14'] = 'http://schemas.microsoft.com/office/powerpoint/2010/main'
+_nsmap['asvg'] = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main'
 
 from ..models import PPt_Template
+from .ppt_color_parse import Color_Parser
+from .icons_handle import Icons_Handler
 
 from django.conf import settings
 
@@ -33,7 +37,7 @@ file_dir = os.path.dirname(os.path.dirname(file_path))
 # 获取父目录的 templates 目录
 templates_dir = os.path.join(file_dir, 'templates')
 
-default_img_prompt = '请不要在图片中增加文字'
+default_img_prompt = '简约插画风' # '请不要在图片中增加文字'
 default_svg_prompt = ''
 
 # 从路径模板新建 ppt
@@ -57,6 +61,7 @@ class PPt_Generator:
         self.template = template
         self.template_path = template.file.path
         self.temp_ppt = Presentation(self.template_path)
+        self.color_parser = Color_Parser(self.temp_ppt)
 
         self.temp_dir = tempfile.TemporaryDirectory()
         self.file_name = file_name
@@ -93,6 +98,8 @@ class PPt_Generator:
         self.client = AsyncOpenAI(base_url=settings.LLM_IMG_GEN_BASE_URL, api_key=settings.LLM_IMG_GEN_API_KEY)
         self.img_gen_model = settings.LLM_IMG_GEN_MODEL
 
+        self.icons_handler = Icons_Handler()
+
     def _get_sections(self):
 
         # 获取所有 section
@@ -111,14 +118,19 @@ class PPt_Generator:
     def _rm_sections(self):
 
         # 获取所有 section
-        sections = self.ppt._element.xpath(f"//p14:section")
-        section_list = self.ppt._element.xpath(f"//p14:sectionLst")
-        if len(section_list) == 0:
-            return
+        # sections = self.ppt._element.xpath(f"//p14:section")
+        # section_list = self.ppt._element.xpath(f"//p14:sectionLst")
+        # if len(section_list) == 0:
+        #     return
 
-        section_list = section_list[0]
-        for section in sections:
-            section_list.remove(section)
+        # section_list = section_list[0]
+        # for section in sections:
+        #     section_list.remove(section)
+
+        section_list = self.ppt._element.xpath(f"//p14:sectionLst")
+        p_ext = self.ppt._element.xpath('//p:ext')
+        if section_list:
+            p_ext[0].remove(section_list[0])
 
     def _get_slide(self, slide_id, ppt=None):
 
@@ -297,6 +309,13 @@ class PPt_Generator:
                         scale = origin_width / scaled_width
 
 
+                        # 获取 tag 的 rid
+                        # tags = {}
+                        # rids = component._element.xpath('.//p:tags/@r:id')
+                        # for rid in rids:
+                        #     r_part = component.part.related_part(rid)
+                        #     tags[rid] = r_part
+
                         # if component.shape_type == MSO_SHAPE_TYPE.GROUP:
                         #     width, height = self._calc_group_shape_size(component)
                         # else:
@@ -308,6 +327,7 @@ class PPt_Generator:
                             'element': component,
                             'width': component.width * scale,
                             'height': component.height * scale,
+                            # 'tags': tags,
                             'placeholders': self._get_placeholder(component)
                         })
 
@@ -402,6 +422,19 @@ class PPt_Generator:
         bilp_info = n_shp._element.xpath('./p:blipFill/a:blip')[0]
         bilp_info.set(f'{{{self.ns['r']}}}embed', rId)
 
+        # 判断是否是 svg
+        svg_embed = o_shp._element.xpath('p:blipFill/a:blip//asvg:svgBlip/@r:embed')
+        if svg_embed != []:
+            rId = svg_embed[0]
+            svg_part =o_shp.part.related_part(rId)
+            n_package = n_shps.part._package
+            n_svg_part = Part(n_package.next_image_partname('svg'), 'image/svg+xml', n_package, svg_part.blob)
+            # n_svg_part = Part(n_package.next_media_partname('svg'), 'image/svg+xml', n_package, svg_part.blob)
+            n_rId = n_shps.part.relate_to(n_svg_part, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image')
+
+            n_svg_blip = n_shp._element.xpath('p:blipFill/a:blip//asvg:svgBlip')[0]
+            n_svg_blip.set(f'{{{self.ns['r']}}}embed', n_rId)
+
     
     def _create_image_parts(self, n_shps, o_shps):
         # 创建图片文件
@@ -437,12 +470,34 @@ class PPt_Generator:
             # 处理分组下的图片
             elif shp.shape_type == MSO_SHAPE_TYPE.GROUP:
                 self._create_image_parts(n_shp.shapes, shp.shapes)
+
+            # 处理 tags
+            # rids = shp._element.xpath('.//p:tags/@r:id')
+            # for rid in rids:
+            #     r_part = shp.part.related_part(rid)
+            #     n_rid = n_shp.part.relate_to(r_part, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags")
+            #     p_tags = n_shp._element.xpath(f'.//p:tags[@r:id="{rid}"]')
+            #     p_tags[0].set(f'{{{self.ns['r']}}}id', n_rid)
                     
 
-    def _insert_slide_from_template(self, slide_id):
+    def _get_slide_layout_index(self, prs, slide):
+
+        i = 0
+        layout = slide.slide_layout
+        for slide_master in prs.slide_masters:
+            j = 0
+            for slide_layout in slide_master.slide_layouts:
+                if slide_layout == layout:
+                    return i, j
+                j += 1
+            i += 1
+
+
+    def _insert_slide_from_template(self, slide_id, copy_notes=False):
         # 复制模板中的指定 slide 到 ppt
         slide = self._get_slide(slide_id, self.temp_ppt)
-        slide_n = self.ppt.slides.add_slide(slide.slide_layout)
+        mi, si = self._get_slide_layout_index(self.temp_ppt, slide)
+        slide_n = self.ppt.slides.add_slide(self.ppt.slide_masters[mi].slide_layouts[si])
 
         # slide_n._element = copy.deepcopy(slide._element)
 
@@ -450,9 +505,6 @@ class PPt_Generator:
 
         # 如果背景是单独的
         if not slide.follow_master_background:
-            with open('tmp_background.xml', 'wb') as f:
-                f.write(slide.background._element.xml)
-                print('@@@')
             slide_n.background._element = copy.deepcopy(slide.background._element)
 
         # 再处理 placeholders
@@ -460,14 +512,22 @@ class PPt_Generator:
 
             o_text_frame = placeholder.text_frame._element
             idx = placeholder._element.ph_idx
-            n_text_frame = slide_n.placeholders[idx].text_frame._element
+            try:
+                n_text_frame = slide_n.placeholders[idx].text_frame._element
+                slide_n.placeholders[idx]._element.replace(n_text_frame, copy.deepcopy(o_text_frame))
+            except: # KeyError("no placeholder on this slide with idx == %d" % idx)
+                pass
 
             # n_text_frame = slide_n.placeholders[i].text_frame._element
             # o_text_frame = slide.placeholders[i].text_frame._element
 
-            slide_n.placeholders[idx]._element.replace(n_text_frame, copy.deepcopy(o_text_frame))
-
         self._deepcopy_shapes(slide_n.shapes, slide.shapes)
+
+        if copy_notes:
+            # 复制 notes
+            notes = slide.notes_slide
+            notes_n = slide_n.notes_slide
+            notes_n.notes_text_frame.text = notes.notes_text_frame.text
         # for shp in slide.shapes:
 
         #     if shp.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER:
@@ -488,7 +548,6 @@ class PPt_Generator:
         #         newel = copy.deepcopy(el)
         #         slide_n.shapes._spTree.insert_element_before(newel, 'p:extLst')
 
-
         return slide_n
 
 
@@ -501,7 +560,7 @@ class PPt_Generator:
                 section_name = section_name[1:]
                 slides_name = self._get_slides_id_from_temp_section(section_name)
                 for slide_name in slides_name:
-                    self._insert_slide_from_template(slide_name)
+                    self._insert_slide_from_template(slide_name, copy_notes=True)
 
 
 # ============
@@ -576,21 +635,33 @@ class PPt_Generator:
     def add_slide(self, slide_data, slide_note=None):
 
         if type(slide_data) == dict and 'template_id' in slide_data.keys():
+        # 从数据生成页面
             temp_no = int(slide_data['template_id'])
             new_slide = self._insert_slide_from_template(temp_no)
             slide_notes = self.replace_placeholders(new_slide.shapes, slide_data['placeholders'])
             if slide_note:
                 slide_notes.extend([slide_note])
+
             new_slide.notes_slide.notes_text_frame.text = '\n'.join(slide_notes)
+            self.replace_icons(new_slide.shapes)
+
+            # 去掉 p:nvPr 下的 p:custDataLst，还是很容易出错
+            # 尤其是在 container 中时，可能 rid 不能出现多次吧
+            for nvPr in new_slide._element.xpath('//p:nvPr'):
+                if cust := nvPr.xpath('./p:custDataLst'):
+                    for c in cust:
+                        nvPr.remove(c)
         
         else:
+        # 直接添加一系列的 slide，添加模板页
             # for section_name in slide_data.keys():
             #     for slide_id in slide_data[section_name]:
             #         slide = self._get_slide(slide_id, self.temp_ppt)
             #         new_slide = self._insert_slide_from_template(slide)
             for slide_id in slide_data:
                 slide = self._get_slide(slide_id, self.temp_ppt)
-                new_slide = self._insert_slide_from_template(slide)
+                new_slide = self._insert_slide_from_template(slide, copy_notes=True)
+            
 
         return new_slide
 
@@ -616,6 +687,38 @@ class PPt_Generator:
             tmp_p.runs[0].text = line
             shape_text_frame._element.insert(-1, tmp_p._element)
 
+
+    def _replace_icon_shape(self, shape, shapes, icon_name, ratio=1):
+
+        icon_path = self.icons_handler.find_icon(icon_name)
+        if icon_path:
+            icon_color = self.color_parser.get_fore_color_rgb_hex(shape)
+            width = int(shape.width.pt * ratio)
+            height = int(shape.height.pt * ratio)
+            icon_svg_content = self.icons_handler.get_icon_content(icon_path)
+            icon_png_path = os.path.join(self.temp_dir.name, f'{icon_name}.png')
+            icon_svg_path = os.path.join(self.temp_dir.name, f'{icon_name}.svg')
+            modified_icon_svg_content = self.icons_handler.modify_svg(icon_svg_content, icon_svg_path, icon_color)
+            self.icons_handler.svg_to_png(modified_icon_svg_content, icon_png_path, width, height)
+            pic = shapes.add_picture(icon_png_path, shape.left, shape.top, shape.width, shape.height)
+            shapes._element.remove(shape._element)
+
+            package = pic.part._package
+            svg_part = Part(package.next_image_partname('svg'), 'image/svg+xml', package, modified_icon_svg_content.encode('utf8'))
+            rid = pic.part.relate_to(svg_part, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image')
+            extLst_str = '''
+            <a:extLst>
+                <a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">
+                    <asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main"
+                        r:embed="RID" />
+                </a:ext>
+            </a:extLst>
+            '''.replace('RID', rid)
+            parser = etree.XMLParser(recover=True)
+            pic._element.xpath('p:blipFill/a:blip')[0].append(etree.fromstring(extLst_str, parser))
+        else:
+            self._replace_text(shape, f'@icon-{icon_name}')
+            
 
     def _parse_style(self, style_str):
         '''
@@ -731,7 +834,7 @@ class PPt_Generator:
             'direction': 'l-r',
             'align': 'c',
             'valign': 'c',
-            'gap': '5000'
+            'gap': '160000'
         }
         shape_text = shape.text_frame.text
         # 寻找 name(style)：notes，(style) 和 ：notes 都可能不存在
@@ -776,11 +879,21 @@ class PPt_Generator:
             self.replace_placeholders([comp], placeholder['components_placeholders'][i])
             shape.element.addprevious(comp.element)
 
+            # 添加 tags
+            # tags = component_dict[0]['tags']
+
+            # for rid in tags.keys():
+            #     r_part = tags[rid]
+            #     n_rid = comp.part.relate_to(r_part, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tags")
+            #     xpath_exp = f'.//p:tags[@r:id="{rid}"]'
+            #     p_tags = comp._element.xpath(xpath_exp)
+            #     p_tags[0].set(f'{{{self.ns['r']}}}id', n_rid)
+
         # 删除 shape
         shape.part.slide.shapes.element.remove(shape.element)
 
 
-    def replace_placeholders(self, shapes, placeholders: list):
+    def replace_placeholders(self, shapes, placeholders: list, ratio=1):
         '''
         遍历 shapes，如果 has_text_frame，读取 text_frame 信息，如果和 placeholder 匹配，替换其内容
         args:
@@ -788,12 +901,21 @@ class PPt_Generator:
             placeholders: 一个列表，每个元素是一个 dict，key 包括 name、content、type
         '''
 
+        # 这里只是把文字描述添加到 ppt 中，不做 multimedia 的生成
+        # multimedia 生成统一完成，不然针对 container 没有添加到 ppt 中，因为没有父元素，会报错：
+        # 'NoneType' object has no attribute 'recalculate_extents'
+
         slide_notes = []
 
         for shape in shapes:
             # 判断 shape 是否是 group
             if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-                sub_slide_notes = self.replace_placeholders(shape.shapes, placeholders)
+
+                origin_width = int(shape.element.xpath('./p:grpSpPr/a:xfrm/a:ext/@cx')[0])
+                scaled_width = int(shape.element.xpath('./p:grpSpPr/a:xfrm/a:chExt/@cx')[0])
+                scale = origin_width / scaled_width
+                group_ratio = ratio * scale
+                sub_slide_notes = self.replace_placeholders(shape.shapes, placeholders, group_ratio)
                 slide_notes.extend(sub_slide_notes)
                 continue
 
@@ -824,6 +946,10 @@ class PPt_Generator:
                 if t == 'text':
                     # shape.text_frame.text = placeholder['content']
                     self._replace_text(shape, placeholder['content'])
+                elif t == 'icon':
+                    # self._replace_icon_shape(shape, shapes, placeholder['content'], ratio)
+                    self._replace_text(shape, f'@icon-{placeholder["content"]}')
+
                 elif t == 'img':
                     # 设置 uid 为 uuid 前四位
                     uid = str(uuid.uuid4())[:4]
@@ -831,23 +957,69 @@ class PPt_Generator:
                     t = '@img-' + uid
                     self._replace_text(shape, t)
                     # 在 slide_notes 中添加 uid 对应的图片
-                    width, height = self.get_img_size(shape.width, shape.height)
+                    width, height = self.get_img_size(shape.width*ratio, shape.height*ratio)
                     slide_notes.append(
-                        f'@img-{uid}\nsize: {int(width)}*{int(height)}\n{default_img_prompt}\n{placeholder["content"]}\n@endimg',
+                        # f'@img-{uid}\nsize: {int(width)}*{int(height)}\n{default_img_prompt}\n{placeholder["content"]}\n@endimg',
+                        f'@img-{uid}\n{default_img_prompt}\n{placeholder["content"]}\n@endimg',
                     )
-                elif t == 'svg':
-                    # 设置 uid 为 uuid 前四位
-                    uid = str(uuid.uuid4())[:4]
-                    t = '@svg-' + uid
-                    self._replace_text(shape, t)
-                    # 在 slide_notes 中添加 uid 对应的 svg
-                    slide_notes.append(
-                        f'@svg-{uid}\n{default_svg_prompt}\n{placeholder["content"]}\n@endsvg',
-                    )
+                # elif t == 'svg':
+                #     # 设置 uid 为 uuid 前四位
+                #     uid = str(uuid.uuid4())[:4]
+                #     t = '@svg-' + uid
+                #     self._replace_text(shape, t)
+                #     # 在 slide_notes 中添加 uid 对应的 svg
+                #     slide_notes.append(
+                #         f'@svg-{uid}\n{default_svg_prompt}\n{placeholder["content"]}\n@endsvg',
+                #     )
                 elif t == 'container':
                     self._replace_container(shape, placeholder)
         
         return slide_notes
+
+    
+    def replace_icons(self, shapes, ratio=1):
+        '''
+        遍历 shapes，如果 has_text_frame，读取 text_frame 信息，如果和 placeholder 匹配，替换其内容
+        args:
+            shapes: python-pptx 中的 shapes
+        '''
+
+        # 这里只是把文字描述添加到 ppt 中，不做 multimedia 的生成
+        # multimedia 生成统一完成，不然针对 container 没有添加到 ppt 中，因为没有父元素，会报错：
+        # 'NoneType' object has no attribute 'recalculate_extents'
+
+        for shape in shapes:
+            # 判断 shape 是否是 group
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+
+                origin_width = int(shape.element.xpath('./p:grpSpPr/a:xfrm/a:ext/@cx')[0])
+                scaled_width = int(shape.element.xpath('./p:grpSpPr/a:xfrm/a:chExt/@cx')[0])
+                scale = origin_width / scaled_width
+                group_ratio = ratio * scale
+                group_top = shape.top
+                group_left = shape.left
+                group_width = shape.width
+                group_height = shape.height
+                self.replace_icons(shape.shapes, group_ratio)
+                shape.top = group_top
+                shape.left = group_left
+                shape.width = group_width
+                shape.height = group_height
+                continue
+
+            if hasattr(shape, 'has_text_frame') and shape.has_text_frame:
+                text = shape.text_frame.text
+                # 判断是否是 placeholder
+                if not text.startswith('@'): continue
+
+                # 寻找 type-name(style)：notes，type- (style) 和 ：notes 都可能不存在
+                pattern = re.compile(
+                    r'^icon-(.*)'
+                )
+                match = re.match(pattern, text[1:])
+                if not match: continue
+                name = match.group(1)
+                self._replace_icon_shape(shape, shapes, name, ratio)
 
 # ============
 # 图片替换与生成相关
@@ -917,7 +1089,7 @@ class PPt_Generator:
                     suc, file_path = await self._generate_img(uid, img_desc, shp.width, shp.height)
                     if not suc:
                         # 添加错误信息到材料中
-                        new_test = text + ' ' + file_path
+                        new_text = text + ' ' + file_path
                         self.add_colorful_text(shp, new_text)
                     else:
                         # 替换图片
@@ -942,12 +1114,13 @@ class PPt_Generator:
         await self.replace_shapes_img(slide.shapes, slide_notes_str)
 
     # 批量替换图片，yield slide 的 id
-    async def batch_replace_img(self):
+    async def batch_replace_multimedia(self):
         '''
         批量替换图片，yield slide 的 id
         '''
         for slide in self.ppt.slides:
             await self.replace_slide_img(slide)
+            self.replace_icons(slide.shapes)
             yield slide.slide_id
 
 # =============

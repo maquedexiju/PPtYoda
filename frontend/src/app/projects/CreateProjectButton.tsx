@@ -27,6 +27,7 @@ interface ProjectCreateFormData {
   duration: number;
   target: string;
   template: PPtTemplate | null;
+  project_template: ProjectTemplate | null;
   knowledge_base: KnowledgeBase | null; // 添加知识库ID字段
 }
 
@@ -34,6 +35,11 @@ interface WebSocketResponse {
   status: 'doing' | 'success';
   desc?: string;
   project_id?: number;
+}
+
+interface ProjectTemplate {
+  id: number;
+  name: string;
 }
 
 const CreateProjectButton = () => {
@@ -48,12 +54,27 @@ const CreateProjectButton = () => {
     });
     return (res.data as { ppt_templates: PPtTemplate[] }).ppt_templates;
   }
+
+  const getProjectTemplates = async () => {
+    const csrfToken = getCookie('csrftoken');
+    const res = await axios.post(process.env.NEXT_PUBLIC_API_URL + '/project_template/list/', {}, {
+      headers: {
+        'X-CSRFToken': csrfToken,
+      },
+      withCredentials: true
+    });
+    return (res.data as { project_templates: ProjectTemplate[] }).project_templates;
+  }
   
   // 打开时，先获取模板列表
   const [pptTemplates, setPPTTemplates] = useState<PPtTemplate[]>([]);
+  const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
   useEffect(() => {
     getPPTTemplates().then(templates => {
       setPPTTemplates(templates);
+    });
+    getProjectTemplates().then(templates => {
+      setProjectTemplates(templates);
     });
   }, []);
 
@@ -84,6 +105,7 @@ const CreateProjectButton = () => {
     duration: 0,
     target: '',
     template: pptTemplates[0] || null,
+    project_template: projectTemplates[0] || null,
     knowledge_base: null, // 初始化知识库状态
   });
   const [modalStatus, setModalStatus] = useState<{
@@ -129,6 +151,16 @@ const CreateProjectButton = () => {
     setFormData(prev => ({
       ...prev,
       knowledge_base: knowledgeBases.find(kb => kb.id === kbId) || null,
+    }));
+  };
+
+  const handleProjectTemplateChoice = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { value } = e.target;
+    // string 转 number
+    const templateId = parseInt(value, 10);
+    setFormData(prev => ({
+      ...prev,
+      project_template: projectTemplates.find(template => template.id === templateId) || null,
     }));
   };
 
@@ -268,7 +300,8 @@ const CreateProjectButton = () => {
                     ))}
                   </select>
                 </div>
-                {/* 增加选择模板的下拉列表 */}
+                {/* 增加选择知识库的下拉列表 */}
+                {/*
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700">选择知识库</label>
                   <select
@@ -281,6 +314,24 @@ const CreateProjectButton = () => {
                     {knowledgeBases.map(kb => (
                       <option key={kb.id} value={kb.id}>
                         {kb.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                */}
+                {/* 增加选择工程模板的下拉列表 */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700">选择工程模板</label>
+                  <select
+                    name="project_template"
+                    value={formData.project_template?.id || ''}
+                    onChange={handleProjectTemplateChoice}
+                    className="mt-1 p-2 w-full border rounded-md"
+                  >
+                    <option value="">请选择工程模板</option>
+                    {projectTemplates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
                       </option>
                     ))}
                   </select>

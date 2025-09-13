@@ -15,6 +15,7 @@ from .models import Project, PPt_Generate
 from ppt_page.models import PPt_Page, Document, Page_and_Doc, Page_and_Template
 from materials.models import Material_Task
 from ppt_template.models import PPt_Template
+from project_manage.models import Project_Template
 from knowledge_base.models import Knowledge_Base
 from knowledge_base.tools.chroma_driver import Chroma_Driver
 
@@ -24,7 +25,7 @@ import asyncio
 
 toc_data_temp = '''
 {
-    "template_id": 1,
+    "template_id": {template_id},
     "placeholders": [
         {
             "name": "toc",
@@ -78,6 +79,13 @@ class CreateProject(AsyncWebsocketConsumer):
         template_json = data.get('template', '')
         template_id = template_json['id']
         template = await PPt_Template.objects.aget(id=template_id)
+        project_template = data.get('project_template', '')
+        if project_template:
+            project_template_id = project_template['id']
+            project_template = await Project_Template.objects.aget(id=project_template_id)
+        else:
+            project_template = None
+
         knowledge_base_json = data.get('knowledge_base', '')
         if knowledge_base_json:
             knowledge_base_id = knowledge_base_json['id']
@@ -102,8 +110,11 @@ class CreateProject(AsyncWebsocketConsumer):
             target=target,
             material_tasks=[],
             ppt_template=template,
-            knowledge_base=knowledge_base
+            knowledge_base=knowledge_base,
+            project_template=project_template
         )
+
+        reference_tasks = project_template.default_materials if project_template else []
         await self.send(json.dumps({
             'status': 'doing',
             'step': 2,
@@ -121,6 +132,7 @@ class CreateProject(AsyncWebsocketConsumer):
             .replace('{place}', place)
             .replace('{duration}', str(duration))
             .replace('{target}', target)
+            .replace('{reference_tasks}', json.dumps(reference_tasks, ensure_ascii=False))
         )
 
         # 配置OpenAI客户端
@@ -222,7 +234,7 @@ class GenerateOutline(AsyncWebsocketConsumer):
         try:
 
             # 基础鉴权
-            project = await Project.objects.aget(id=project_id, user=self.scope['user'])
+            project = await Project.objects.select_related('project_template', 'ppt_template').aget(id=project_id, user=self.scope['user'])
 
             if project == None:
                 await self.send(json.dumps({
@@ -255,6 +267,15 @@ class GenerateOutline(AsyncWebsocketConsumer):
                 'desc': '正在生成大纲'
             }))
 
+            # 如果项目当前的 outline 不为空，获取当前模板
+            if project.outline:
+                default_outline = project.outline
+            elif project.project_template:
+                project_template = await Project_Template.objects.aget(id=project.project_template.id)
+                default_outline = project_template.default_outline
+            else:
+                default_outline = []
+
 
             # 配置OpenAI客户端
             try:
@@ -269,7 +290,6 @@ class GenerateOutline(AsyncWebsocketConsumer):
                 }), close=True)
                 return
 
-            await asyncio.sleep(3)
             await self.send(json.dumps({
                 'status': 'doing',
                 'step': 2,
@@ -289,6 +309,7 @@ class GenerateOutline(AsyncWebsocketConsumer):
                 .replace('{duration}', str(project.duration))
                 .replace('{target}', project.target)
                 .replace('{related_files}', related_files)
+                .replace('{default_outline}', json.dumps(default_outline, ensure_ascii=False))
             )
 
 
@@ -1031,7 +1052,12 @@ class GeneratePPT(AsyncWebsocketConsumer):
                 toc_component_temp.replace('{title}', o['name']).replace('{number}', str(toc_no))
             )
             toc_no += 1
-        response_str = toc_data_temp.replace('{toc_components}', ', '.join(toc_components_list))
+        response_str = (
+            toc_data_temp
+            .replace('{toc_components}', ', '.join(toc_components_list))
+            .replace('{template_id}', str(template.toc_template['id']))
+        )
+        
         response_dict = json.loads(response_str)
 
         toc_page_and_temp, created = await Page_and_Template.objects.aupdate_or_create(
@@ -1094,7 +1120,11 @@ class GeneratePPT(AsyncWebsocketConsumer):
                         ppt_template=template
                     )
                     data = ppt_page_and_temp.data
+                    empty = False
                 except:
+                    empty = True
+                
+                if data == {} or data == None or data == [] or empty == True:
                     # 没有 slide_data
                     temp = template.blank_template.copy()
                     if 'placeholders' in temp.keys() and len(temp['placeholders']) > 0:
@@ -1110,13 +1140,13 @@ class GeneratePPT(AsyncWebsocketConsumer):
                 ppt_generator.add_slide(data, slide_note)
         
         # 图片替换
-        # i = 1
-        # async for _ in ppt_generator.batch_replace_img():
-        #     await self.send(json.dumps({
-        #         'status': 'doing',
-        #         'message': f'正在替换第 {i} 页的图片'
-        #     }))
-        #     i += 1
+        i = 1
+        async for _ in ppt_generator.batch_replace_multimedia():
+            await self.send(json.dumps({
+                'status': 'doing',
+                'message': f'正在替换第 {i} 页的图片'
+            }))
+            i += 1
 
         await self.send(json.dumps({
             'status': 'doing',
@@ -1204,7 +1234,7 @@ class MultimediaProcessing(AsyncWebsocketConsumer):
         # 替换文件
         ppt_generator = PPt_Generator(intermediate_file, project.ppt_template)
         i = 1
-        async for _ in ppt_generator.batch_replace_img():
+        async for _ in ppt_generator.batch_replace_multimedia():
             await self.send(json.dumps({
                 'status': 'doing',
                 'message': f'正在替换第 {i} 页的图片'

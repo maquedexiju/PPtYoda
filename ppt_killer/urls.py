@@ -27,4 +27,5 @@ urlpatterns = [
     path('api/knowledge_base/', include('knowledge_base.urls')),
     path("api/users/", include("users.urls")), # 用户认证模块
     path("api/ppt_template/", include("ppt_template.urls")), # ppt模板管理模块
+    path("api/project_template/", include("project_template.urls")), # 工程模板管理模块
 ]

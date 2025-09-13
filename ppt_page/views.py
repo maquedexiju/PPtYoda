@@ -412,7 +412,7 @@ def change_template(request, page_id):
             return JsonResponse({'error': 'PPT页面不存在'}, status=404)
 
         template = ppt_page.project.ppt_template
-        page_and_template = Page_and_Template.objects.get(ppt_page=ppt_page, ppt_template=template)
+        page_and_template, _ = Page_and_Template.objects.get_or_create(ppt_page=ppt_page, ppt_template=template)
         page_and_template.template_id = template_id
         page_and_template.save()
 

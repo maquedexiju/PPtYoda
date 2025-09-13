@@ -106,9 +106,19 @@ class Web_Browser:
         else: check_command = self._check_port_unix
 
         while True:
-            if check_command(9222): break
+            if check_command(9222): 
+                break
             await asyncio.sleep(1)
             print('等待浏览器启动...')
+        
+        while True:
+            try:
+                window_id = await self.browser.get_window_id()
+                if window_id:
+                    break
+            except:
+                await asyncio.sleep(1)
+
 
     async def start_browser(self):
 

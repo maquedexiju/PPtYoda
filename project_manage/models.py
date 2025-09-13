@@ -9,6 +9,7 @@ from knowledge_base.tools.chroma_driver import Chroma_Driver
 from materials.models import Document, Material_Task
 from ppt_template.models import PPt_Template
 from knowledge_base.models import Knowledge_Base
+from project_template.models import Project_Template
 
 class Project(models.Model):
     id = models.AutoField(primary_key=True)
@@ -32,6 +33,8 @@ class Project(models.Model):
     material_tasks = models.JSONField(default=list, blank=True)
     # 一个 dict，包含 name, desc, status, sub_tasks
     doc_db_updated = models.BooleanField(default=False)
+    # 对应的 project_template
+    project_template = models.ForeignKey(Project_Template, on_delete=models.PROTECT, null=True, blank=True, default=None)
 
     # 当前任务，可选项 materials, outline, ppt
     STAGE_CHOICES = [

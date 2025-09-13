@@ -152,6 +152,7 @@ export const MaterialDocContent: React.FC<MaterialDocContentProps> = ({ selected
       if (documentTitle.trim()) {
         await saveDocument();
         onContentChange(selectedFile);
+        setIsModified(false);
       }
     }
   };

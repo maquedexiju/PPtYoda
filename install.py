@@ -38,6 +38,11 @@ def delete_old_files():
 def init_database():
     """执行数据库初始化"""
     print_with_color("正在执行数据库初始化")
+
+    # 检查数据库文件是否存在
+    if os.path.exists("db.sqlite3"):
+        print_with_color("数据库文件已存在")
+        return
     
     # 执行数据库迁移
     print_with_color("执行数据库迁移...")
@@ -62,6 +67,11 @@ def init_database():
 def configure_files():
     """配置文件"""
     print_with_color("正在配置文件")
+
+    # 检查配置文件是否存在
+    if os.path.exists("config.ini"):
+        print_with_color("配置文件已存在")
+        return
     
     # 复制配置文件
     if os.path.exists("config.ini.example"):
@@ -122,7 +132,7 @@ if __name__ == "__main__":
     print_with_color("==== PPT Killer 安装脚本 ====")
 
     # 删除旧模板
-    delete_old_files()
+    # delete_old_files()
     
     # 数据制作过程
     configure_files()

@@ -138,11 +138,15 @@ class Chroma_Driver:
             include=include
         )
         # 转换 id 为 int
+        try:
+            ids = [int(id) for id in result['ids'][0]]
+        except:
+            ids = result['ids'][0]
         result_one = {
-            'ids': [int(id) for id in result['ids'][0]],
+            'ids': ids,
             'metadatas': result['metadatas'][0],
             'documents': result['documents'][0],
-            'distances': result['distances'][0],
+            'distances': result['distances'][0], # 数值越大，相似度越低
         }
         return result_one
 
@@ -169,7 +173,12 @@ class Chroma_Driver:
             where=where,
             include=include
         )
-        result['ids'] = [int(id) for id in result['ids']]
+        # 转换 id 为 int
+        try:
+            result['ids'] = [int(id) for id in result['ids']]
+        except:
+            pass
+
         return result
 
 

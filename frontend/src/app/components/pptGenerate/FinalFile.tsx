@@ -42,7 +42,7 @@ export const FinalFile: React.FC<{
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = file_name + '.pptx';
+                link.download = file_name;
                 link.click();
                 URL.revokeObjectURL(url);
                 
