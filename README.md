@@ -10,6 +10,8 @@ PPt Yoda 是一个强大的、由 AI 驱动的演示文稿（PPt）自动化生�
 
 您可以先通过 [设计理念](#设计理念) 了解本项目的设计理念和核心理念，再决定是否继续。
 
+欢迎点击右上角的星星⭐来支持项目，您的支持是我们更新项目的最大动力！
+
 ## 核心功能
 
 PPT Yoda 将整个创作过程流水线化，每一步都支持 AI 辅助和人工微调：
@@ -31,7 +33,7 @@ PPT Yoda 将整个创作过程流水线化，每一步都支持 AI 辅助和人�
 
 你也可以通过项目生成的[示例 PPt](docs/PPtYoda介绍.pptx) 直观感受一下效果，或者看一下操作视频，了解一下具体功能:
 
-https://github.com/user-attachments/assets/246649fa-e378-43ec-a8b9-263efb68b106
+https://github.com/user-attachments/assets/990ea9b7-d590-4a8a-adf5-9664f820f45a
 
 https://github.com/user-attachments/assets/08c40451-8815-42bd-96dd-501a73a0b133
 
